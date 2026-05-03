@@ -104,20 +104,47 @@ Semilla: ${imgPayload.seed}`
         return
       }
 
-      const res = await fetch("http://localhost:8787/api/chat", {
-        method: "POST", signal: ctrl.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider,
-          model: provider === "groq" ? "llama-3.3-70b-versatile" : "claude-sonnet-4-20250514",
-          max_tokens: 4096,
-          system: webSearch ? `${system} Puedes usar contexto actualizado si está disponible.` : system,
-          messages: newMsgs.map(m => ({ role: m.role, content: m.content }))
+      let reply = ""
+      if (provider === "anthropic") {
+        const res = await fetch("http://localhost:8787/api/chat/stream", {
+          method: "POST", signal: ctrl.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 4096,
+            system: webSearch ? `${system} Puedes usar contexto actualizado si está disponible.` : system,
+            messages: newMsgs.map(m => ({ role: m.role, content: m.content }))
+          })
         })
-      })
-      const payload = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`)
-      const reply = (payload?.text || "").trim() || buildFallbackResponse(text, mode, style)
+        if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+        const reader = res.body.getReader(); const dec = new TextDecoder(); let full = ""
+        while (true) {
+          const { done, value } = await reader.read(); if (done) break
+          for (const line of dec.decode(value).split("
+")) {
+            if (!line.startsWith("data:")) continue
+            const raw = line.slice(5).trim(); if (!raw) continue
+            try { const ev = JSON.parse(raw); if (ev.token) { full += ev.token; setChats(p => p.map(c => c.id === activeChat ? { ...c, msgs: [...newMsgs, { role: "assistant", content: full }] } : c)) } } catch {}
+          }
+        }
+        reply = full
+      } else {
+        const res = await fetch("http://localhost:8787/api/chat", {
+          method: "POST", signal: ctrl.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider,
+            model: "llama-3.3-70b-versatile",
+            max_tokens: 4096,
+            system: webSearch ? `${system} Puedes usar contexto actualizado si está disponible.` : system,
+            messages: newMsgs.map(m => ({ role: m.role, content: m.content }))
+          })
+        })
+        const payload = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`)
+        reply = payload?.text || ""
+      }
+      reply = reply.trim() || buildFallbackResponse(text, mode, style)
       setChats(p => p.map(c => c.id === activeChat ? { ...c, msgs: [...newMsgs, { role: "assistant", content: reply }] } : c))
     } catch (e) {
       if (e.name !== "AbortError") {

@@ -30,3 +30,9 @@ npm run dev:full
 
 ## Nota de seguridad
 La key ya no se expone en `VITE_*`; ahora vive solo en backend (`ANTHROPIC_API_KEY`).
+
+
+## Seguridad y límites
+- Rate limit básico en backend (60 requests/min por IP).
+- Streaming SSE para Anthropic en `/api/chat/stream`.
+- Fallback local si el proveedor falla.
