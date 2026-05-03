@@ -82,53 +82,23 @@ export default function App() {
       const ctrl = new AbortController()
       abortRef.current = ctrl
 
-      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY || import.meta.env.VITE_API_KEY
-      if (!apiKey) throw new Error("Falta VITE_ANTHROPIC_API_KEY en .env")
-
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", signal:ctrl.signal,
-        headers:{
-          "Content-Type":"application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true"
-        },
+      const res = await fetch("http://localhost:8787/api/chat", {
+        method:"POST",
+        signal:ctrl.signal,
+        headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",
-          max_tokens:4096, stream:true, system,
+          max_tokens:4096,
+          system,
           ...(tools.length?{tools}:{}),
           messages:newMsgs.map(m=>({role:m.role,content:m.content}))
         })
       })
 
-      if (!res.ok || !res.body) {
-        throw new Error(`HTTP ${res.status}`)
-      }
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`)
 
-      const reader = res.body.getReader()
-      const dec = new TextDecoder()
-      let full = ""
-
-      while(true) {
-        const {done,value} = await reader.read()
-        if(done) break
-        for(const line of dec.decode(value).split("\n")) {
-          if(!line.startsWith("data:")) continue
-          const raw = line.slice(5).trim()
-          if(raw==="[DONE]"||!raw) continue
-          try {
-            const ev = JSON.parse(raw)
-            if(ev.type==="content_block_delta"&&ev.delta?.type==="text_delta") {
-              full += ev.delta.text
-              setStreaming(full)
-            }
-          } catch {
-            // ignorar eventos no JSON o parciales
-          }
-        }
-      }
-
-      const reply = full.trim() || buildFallbackResponse(text, mode, style)
+      const reply = (payload?.text || "").trim() || buildFallbackResponse(text, mode, style)
       setChats(p=>p.map(c=>c.id===activeChat
         ?{...c,msgs:[...newMsgs,{role:"assistant",content:reply}]}:c))
       setStreaming("")
