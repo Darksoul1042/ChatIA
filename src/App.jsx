@@ -49,6 +49,7 @@ export default function App() {
   })
   const [activeChat, setActive] = useState("1")
   const [searchTerm, setSearchTerm] = useState("")
+  const [provider, setProvider] = useState(() => localStorage.getItem("nova-provider") || "anthropic")
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [mode, setMode] = useState("chat")
@@ -63,6 +64,7 @@ export default function App() {
   const filteredChats = chats.filter(c => c.title.toLowerCase().includes(searchTerm.toLowerCase()))
 
   useEffect(() => { localStorage.setItem("nova-chats", JSON.stringify(chats)) }, [chats])
+  useEffect(() => { localStorage.setItem("nova-provider", provider) }, [provider])
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [msgs])
 
   const newChat = () => {
@@ -88,7 +90,8 @@ export default function App() {
         method: "POST", signal: ctrl.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          provider,
+          model: provider === "groq" ? "llama-3.3-70b-versatile" : "claude-sonnet-4-20250514",
           max_tokens: 4096,
           system: webSearch ? `${system} Puedes usar contexto actualizado si está disponible.` : system,
           messages: newMsgs.map(m => ({ role: m.role, content: m.content }))
@@ -105,7 +108,7 @@ export default function App() {
       }
     }
     setLoading(false)
-  }, [input, loading, msgs, activeChat, mode, style, webSearch])
+  }, [input, loading, msgs, activeChat, mode, style, webSearch, provider])
 
   return (
     <div style={{ display: "flex", height: "100vh", fontFamily: "sans-serif" }}>
@@ -134,6 +137,7 @@ export default function App() {
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
           <select value={mode} onChange={e => setMode(e.target.value)}><option value="chat">Chat</option><option value="code">Code</option><option value="fast">Fast</option><option value="balanced">Balanced</option><option value="deep">Deep</option></select>
           <select value={style} onChange={e => setStyle(e.target.value)}>{Object.entries(STYLES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select>
+          <select value={provider} onChange={e => setProvider(e.target.value)}><option value="anthropic">Anthropic</option><option value="groq">Groq</option></select>
           <label><input type="checkbox" checked={webSearch} onChange={e => setWebSearch(e.target.checked)} /> Web</label>
         </div>
         {errorMsg && <div style={{ marginTop: 10, color: "#b45309", fontSize: 12 }}>{errorMsg}</div>}
