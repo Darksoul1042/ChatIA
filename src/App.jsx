@@ -11,8 +11,8 @@ import { saveAs } from "file-saver";
 import html2pdf from "html2pdf.js";
 
 // 🔒 FIREBASE
-import { auth, googleProvider } from "./firebase";
-import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { auth, authReady, googleProvider } from "./firebase";
+import { signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from "firebase/auth";
 
 // 💽 INDEXEDDB (Memoria Local)
 const idb = {
@@ -69,9 +69,22 @@ const SUGERENCIAS_DINAMICAS =[
   { text: "Dibuja un gato astronauta hiperrealista", icon: "🎨", type: "image" }
 ];
 
+function getAuthErrorMessage(error) {
+  const messages = {
+    "auth/unauthorized-domain": "Este dominio no está autorizado en Firebase. Agrega localhost y 127.0.0.1 en Authentication > Settings > Authorized domains.",
+    "auth/operation-not-allowed": "El inicio con Google no está habilitado en Firebase Authentication.",
+    "auth/popup-blocked": "El navegador bloqueó la ventana de Google. Nova intentará continuar con redirección.",
+    "auth/popup-closed-by-user": "La ventana de Google se cerró antes de completar el inicio de sesión.",
+    "auth/cancelled-popup-request": "Se canceló una solicitud anterior de inicio con Google. Inténtalo otra vez.",
+    "auth/invalid-api-key": "La API key de Firebase no es válida. Revisa el archivo .env.local.",
+  };
+  return messages[error?.code] || error?.message || "No se pudo iniciar sesión con Google.";
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [authError, setAuthError] = useState("");
 
   const[isDBLoaded, setIsDBLoaded] = useState(false);
   const [chats, setChats] = useState([]);
@@ -135,6 +148,13 @@ export default function App() {
     return () => unsubscribe();
   },[]);
 
+  useEffect(() => {
+    getRedirectResult(auth).catch((error) => {
+      console.error(error);
+      setAuthError(getAuthErrorMessage(error));
+    });
+  }, []);
+
   // 💽 CARGA DE BASE DE DATOS LOCAL
   useEffect(() => {
     if (!user) return;
@@ -150,7 +170,16 @@ export default function App() {
   useEffect(() => { localStorage.setItem("nova-apikey", apiKey) },[apiKey]);
   useEffect(() => { localStorage.setItem("nova-replicate-key", replicateKey) },[replicateKey]);
 
-  const loginWithGoogle = async () => { try { await signInWithPopup(auth, googleProvider); } catch (e) { console.error(e); } };
+  const loginWithGoogle = async () => {
+    setAuthError("");
+    try {
+      await authReady;
+      await signInWithRedirect(auth, googleProvider);
+    } catch (error) {
+      console.error(error);
+      setAuthError(getAuthErrorMessage(error));
+    }
+  };
   const logout = async () => { await signOut(auth); setChats([]); };
 
   // 📱 RESPONSIVIDAD Y SCROLL
@@ -483,6 +512,11 @@ export default function App() {
           <button onClick={loginWithGoogle} style={{width:"100%", padding:"14px", borderRadius:"12px", border:"none", background:"#fff", color:"#000", fontSize:"16px", fontWeight:"bold", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:"10px", transition:"0.2s"}}>
             Continuar con Google
           </button>
+          {authError && (
+            <p style={{color:"#fecaca", background:"rgba(239,68,68,0.14)", border:"1px solid rgba(248,113,113,0.35)", borderRadius:"10px", padding:"10px 12px", margin:"16px 0 0", fontSize:"13px", lineHeight:1.4}}>
+              {authError}
+            </p>
+          )}
         </div>
       </div>
     );

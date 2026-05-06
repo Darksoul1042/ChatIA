@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { browserLocalPersistence, getAuth, GoogleAuthProvider, setPersistence } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -21,4 +21,15 @@ if (missingConfig.length > 0) {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
+auth.useDeviceLanguage();
+
+export const authReady = setPersistence(auth, browserLocalPersistence).catch((error) => {
+  console.warn("Firebase auth persistence could not be configured", error);
+});
+
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope("email");
+googleProvider.addScope("profile");
+googleProvider.setCustomParameters({
+  prompt: "select_account",
+});
